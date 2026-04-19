@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+opencv-python
+websockets
+httpx
+sounddevice
+numpy
+python-multipart

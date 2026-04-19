@@ -70,6 +70,7 @@ class ElevenLabsWSManager:
         self._first_audio_logged = False
         self._buffered_opening_description: str | None = None
         self._last_opening_audio_at: float | None = None
+        self._active_voice_override = ""
         self._lock = asyncio.Lock()
 
     async def reset_state(self, clear_disconnect_flag: bool = False) -> None:
@@ -85,6 +86,7 @@ class ElevenLabsWSManager:
         self._last_sent_snapshot = None
         self._buffered_opening_description = None
         self._last_opening_audio_at = None
+        self._active_voice_override = ""
 
         await self._cancel_task(self.fallback_task)
         self.fallback_task = None
@@ -142,6 +144,7 @@ class ElevenLabsWSManager:
             self._opening_audio_received = False
             self._first_audio_logged = False
             self._last_opening_audio_at = None
+            self._active_voice_override = self._get_voice_override(event_data)
             session_state.audio_diagnosis = ""
 
             websocket = None
@@ -158,22 +161,22 @@ class ElevenLabsWSManager:
                     max_size=None,
                 )
                 session_state.append_log(
-                    "ElevenLabs WebSocket opened. Sending dynamic variables."
+                    "ElevenLabs WebSocket opened. Sending conversation initiation data."
                 )
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "conversation_initiation_client_data",
-                            "dynamic_variables": self._build_dynamic_variables(
-                                event_data
-                            ),
-                        }
-                    )
+                initiation_payload = self._build_conversation_initiation_payload(
+                    event_data
                 )
+                await websocket.send(json.dumps(initiation_payload))
                 session_state.kickoff_state = "waiting_for_opening"
-                session_state.append_log(
-                    "Sent ElevenLabs dynamic variables for launch context."
-                )
+                if self._active_voice_override:
+                    session_state.append_log(
+                        "Sent ElevenLabs dynamic variables and TTS voice override "
+                        "for launch context."
+                    )
+                else:
+                    session_state.append_log(
+                        "Sent ElevenLabs dynamic variables for launch context."
+                    )
 
                 metadata = await asyncio.wait_for(websocket.recv(), timeout=10)
                 if isinstance(metadata, bytes):
@@ -183,6 +186,8 @@ class ElevenLabsWSManager:
 
                 parsed = json.loads(metadata)
                 if parsed.get("type") != "conversation_initiation_metadata":
+                    if parsed.get("type") == "error":
+                        raise RuntimeError(self._format_elevenlabs_error(parsed))
                     raise RuntimeError(
                         "Handshake metadata not received as the first message."
                     )
@@ -258,7 +263,9 @@ class ElevenLabsWSManager:
                 await self._stop_audio_writer()
                 await self._close_audio_stream()
             except Exception as exc:
-                message = f"ElevenLabs connection error: {exc}"
+                message = self._add_voice_override_guidance(
+                    f"ElevenLabs connection error: {exc}"
+                )
                 session_state.set_error(message)
                 session_state.append_log(message)
                 session_state.elevenlabs_connected = False
@@ -336,7 +343,7 @@ class ElevenLabsWSManager:
         message_type = payload.get("type", "")
         self._record_event_summary(payload)
         if message_type == "error":
-            message = f"ElevenLabs error: {payload}"
+            message = self._format_elevenlabs_error(payload)
             session_state.set_error(message)
             session_state.append_log(message)
         elif message_type == "audio":
@@ -633,6 +640,8 @@ class ElevenLabsWSManager:
                 pass
 
     async def _handle_disconnect(self, message: str) -> None:
+        raw_message = message
+        message = self._add_voice_override_guidance(message)
         session_state.set_error(message)
         session_state.append_log(message)
         session_state.elevenlabs_connected = False
@@ -652,6 +661,16 @@ class ElevenLabsWSManager:
         self.opening_force_release_task = None
         await self._stop_audio_writer()
         await self._close_audio_stream()
+
+        if self._is_voice_override_policy_error(raw_message):
+            session_state.kickoff_state = "idle"
+            session_state.is_running = False
+            session_state.append_log(
+                "Voice override rejected by ElevenLabs. This cannot be fixed by reconnecting; "
+                "enable Voice ID overrides in the agent Security settings, or set this voice "
+                "as the agent's dashboard voice and clear the setup-page Voice ID field."
+            )
+            return
 
         if not session_state.is_running or self._disconnect_requested:
             return
@@ -730,6 +749,59 @@ class ElevenLabsWSManager:
             "agenda": event_data.get("agenda", ""),
             "notes": event_data.get("notes", "") or "none provided",
         }
+
+    def _build_conversation_initiation_payload(self, event_data: dict) -> dict:
+        payload = {
+            "type": "conversation_initiation_client_data",
+            "dynamic_variables": self._build_dynamic_variables(event_data),
+        }
+        voice_id = self._get_voice_override(event_data)
+        if voice_id:
+            payload["conversation_config_override"] = {
+                "tts": {
+                    "voice_id": voice_id,
+                }
+            }
+        return payload
+
+    def _get_voice_override(self, event_data: dict) -> str:
+        return str(event_data.get("elevenlabs_voice_id") or "").strip()
+
+    def _format_elevenlabs_error(self, payload: dict) -> str:
+        raw_error = (
+            payload.get("error")
+            or payload.get("error_event")
+            or payload.get("message")
+            or payload
+        )
+        if isinstance(raw_error, dict):
+            error_text = json.dumps(raw_error, ensure_ascii=True)
+        else:
+            error_text = str(raw_error)
+
+        return self._add_voice_override_guidance(f"ElevenLabs error: {error_text}")
+
+    def _add_voice_override_guidance(self, message: str) -> str:
+        if not self._active_voice_override:
+            return message
+        if "Voice ID overrides enabled" in message:
+            return message
+
+        return (
+            f"{message} A voice override was requested for "
+            f"{self._active_voice_override}. Confirm this ElevenLabs agent has "
+            "Voice ID overrides enabled in its Security settings and that the "
+            "voice ID is valid for the API key in .env."
+        )
+
+    def _is_voice_override_policy_error(self, message: str) -> bool:
+        if not self._active_voice_override:
+            return False
+        lowered = message.lower()
+        return (
+            "override for field 'voice_id' is not allowed" in lowered
+            or 'override for field "voice_id" is not allowed' in lowered
+        )
 
     def _build_launch_kickoff_message(self, event_data: dict) -> str:
         return (

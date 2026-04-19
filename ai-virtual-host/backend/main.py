@@ -20,6 +20,9 @@ from .session import session_state
 app = FastAPI(title="AI Virtual Host")
 
 DEFAULT_PERSONA_NAME = "AI Virtual Host"
+DEFAULT_ELEVENLABS_VOICE_ID = os.getenv(
+    "ELEVENLABS_VOICE_ID", "2BsEFcU7jUhLaUwV4h7l"
+).strip()
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +39,7 @@ elevenlabs_task: asyncio.Task | None = None
 
 class LaunchRequest(BaseModel):
     persona_name: str = ""
+    elevenlabs_voice_id: str = DEFAULT_ELEVENLABS_VOICE_ID
     event_name: str = Field(min_length=1)
     event_description: str = Field(min_length=1)
     hosts: str = Field(min_length=1)
@@ -61,8 +65,10 @@ def _extract_agent_preflight(agent_payload: dict) -> dict[str, Any]:
     }
 
 
-def _build_preflight_error(preflight: dict[str, Any]) -> str:
-    if not preflight["voice_id"]:
+def _build_preflight_error(
+    preflight: dict[str, Any], requested_voice_id: str = ""
+) -> str:
+    if not preflight["voice_id"] and not requested_voice_id:
         return (
             "ElevenLabs launch blocked: no TTS voice is configured for this agent."
         )
@@ -109,9 +115,15 @@ async def launch_session(payload: LaunchRequest) -> dict[str, str]:
     await elevenlabs_manager.reset_state(clear_disconnect_flag=True)
     event_data = payload.model_dump()
     event_data["persona_name"] = event_data.get("persona_name") or DEFAULT_PERSONA_NAME
+    event_data["elevenlabs_voice_id"] = str(
+        event_data.get("elevenlabs_voice_id") or DEFAULT_ELEVENLABS_VOICE_ID
+    ).strip()
     session_state.event_data = event_data
     session_state.log = []
     session_state.reset_runtime_state()
+    requested_voice_id = event_data["elevenlabs_voice_id"]
+    if requested_voice_id:
+        session_state.agent_voice_id = requested_voice_id
     session_state.append_log(
         f"Launch requested for event: {session_state.event_data['event_name']}."
     )
@@ -120,8 +132,13 @@ async def launch_session(payload: LaunchRequest) -> dict[str, str]:
         f"hosts={session_state.event_data['hosts']}; "
         f"sponsors={session_state.event_data['sponsors'] or 'none provided'}; "
         f"agenda_length={len(session_state.event_data['agenda'])}; "
-        f"notes_present={'yes' if session_state.event_data['notes'] else 'no'}."
+        f"notes_present={'yes' if session_state.event_data['notes'] else 'no'}; "
+        f"voice_override={'yes' if requested_voice_id else 'no'}."
     )
+    if requested_voice_id:
+        session_state.append_log(
+            f"ElevenLabs voice override requested: {requested_voice_id}."
+        )
 
     agent_id = os.getenv("ELEVENLABS_AGENT_ID", "")
     if not agent_id or agent_id == "your_elevenlabs_agent_id_here":
@@ -158,19 +175,20 @@ async def launch_session(payload: LaunchRequest) -> dict[str, str]:
         session_state.agent_preflight_status = "ok"
         session_state.agent_text_only = preflight["text_only"]
         session_state.agent_client_events = preflight["client_events"]
-        session_state.agent_voice_id = preflight["voice_id"]
+        session_state.agent_voice_id = requested_voice_id or preflight["voice_id"]
         session_state.agent_first_message_status = preflight["first_message_status"]
         session_state.audio_diagnosis = ""
 
         session_state.append_log(
             "ElevenLabs preflight loaded: "
             f"text_only={preflight['text_only']}, "
-            f"voice_id={'set' if preflight['voice_id'] else 'missing'}, "
+            f"default_voice_id={'set' if preflight['voice_id'] else 'missing'}, "
+            f"effective_voice_id={'override' if requested_voice_id else 'default'}, "
             f"audio_format={preflight['agent_output_audio_format'] or 'missing'}, "
             f"client_events={', '.join(preflight['client_events']) or 'none'}."
         )
 
-        preflight_error = _build_preflight_error(preflight)
+        preflight_error = _build_preflight_error(preflight, requested_voice_id)
         if preflight_error:
             session_state.set_error(preflight_error)
             session_state.append_log(preflight_error)

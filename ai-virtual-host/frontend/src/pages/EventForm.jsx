@@ -6,9 +6,11 @@ import { getStatus, launchSession, stopSession } from "../api";
 const RUNNING_KEY = "ai-virtual-host-running";
 const SESSION_SEEN_KEY = "ai-virtual-host-session-seen";
 const FORM_KEY = "ai-virtual-host-form";
+const DEFAULT_ELEVENLABS_VOICE_ID = "2BsEFcU7jUhLaUwV4h7l";
 
 const emptyForm = {
   persona_name: "Sid",
+  elevenlabs_voice_id: DEFAULT_ELEVENLABS_VOICE_ID,
   event_name: "",
   event_description: "",
   hosts: "",
@@ -33,7 +35,13 @@ function EventForm() {
     }
 
     try {
-      return { ...emptyForm, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      return {
+        ...emptyForm,
+        ...parsed,
+        elevenlabs_voice_id:
+          parsed.elevenlabs_voice_id || DEFAULT_ELEVENLABS_VOICE_ID,
+      };
     } catch {
       return emptyForm;
     }
@@ -203,6 +211,24 @@ function EventForm() {
                 maxLength={32}
                 placeholder="Sid"
               />
+            </div>
+
+            <div className="sf">
+              <label className="sl" htmlFor="elevenlabs_voice_id">
+                ElevenLabs voice ID
+              </label>
+              <input
+                className="si"
+                id="elevenlabs_voice_id"
+                name="elevenlabs_voice_id"
+                value={formData.elevenlabs_voice_id}
+                onChange={handleChange}
+                readOnly={isReadOnly}
+                placeholder={DEFAULT_ELEVENLABS_VOICE_ID}
+              />
+              <p className="field-hint">
+                Default voice: 2BsEFcU7jUhLaUwV4h7l. ElevenLabs will reject this unless Voice ID overrides are enabled in the agent security settings.
+              </p>
             </div>
 
             <div className="sf">

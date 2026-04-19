@@ -204,6 +204,16 @@ function formatBytes(byteCount) {
   return `${(byteCount / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatVoiceId(voiceId) {
+  if (!voiceId) {
+    return "agent default";
+  }
+  if (voiceId.length <= 18) {
+    return voiceId;
+  }
+  return `${voiceId.slice(0, 8)}...${voiceId.slice(-6)}`;
+}
+
 function getOrbMode({ sessionActive, connectionState, diagnostics, isSpeaking }) {
   if (!sessionActive) {
     return "idle";
@@ -870,6 +880,13 @@ function LiveStatus() {
             <div className="quick live-pill">
               <span>audio bytes</span>
               <strong>{formatBytes(diagnostics.audio_bytes_received)}</strong>
+            </div>
+            <div
+              className="quick live-pill"
+              title={diagnostics.agent_voice_id || "Using the ElevenLabs agent default voice"}
+            >
+              <span>voice</span>
+              <strong>{formatVoiceId(diagnostics.agent_voice_id)}</strong>
             </div>
             <a className="quick" href="/logs">
               open logs

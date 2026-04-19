@@ -264,6 +264,13 @@ a {
   line-height: 1.5;
 }
 
+.field-hint {
+  margin: 7px 2px 0;
+  color: var(--ink-500);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .mood-row {
   display: flex;
   gap: 8px;

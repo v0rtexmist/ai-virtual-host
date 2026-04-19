@@ -14,6 +14,20 @@ AI Virtual Host is a full-stack event tool that watches the audience through a l
 
 1. Clone this project and open the `ai-virtual-host` folder.
 2. Fill in the root `.env` file with your OpenRouter and ElevenLabs credentials.
+
+Required ElevenLabs values stay server-side in `.env`:
+
+```powershell
+ELEVENLABS_AGENT_ID=your_agent_id
+ELEVENLABS_API_KEY=your_api_key
+```
+
+Optional default voice override:
+
+```powershell
+ELEVENLABS_VOICE_ID=2BsEFcU7jUhLaUwV4h7l
+```
+
 3. Install backend dependencies:
 
 ```powershell
@@ -54,6 +68,9 @@ Important:
 - Your ElevenLabs dashboard prompt and first message should reference those placeholders directly, for example `{{event_name}}` and `{{hosts}}`.
 - Disable text-only chat mode for this agent.
 - Make sure the agent's client events include `audio`.
+- The setup page defaults to the ElevenLabs voice ID `2BsEFcU7jUhLaUwV4h7l`.
+- Enable the `Voice ID` override in the agent's Security settings. ElevenLabs will close the WebSocket with policy violation `1008` if this override is sent before that setting is enabled.
+- If you do not want to enable runtime overrides, set `2BsEFcU7jUhLaUwV4h7l` as the agent's dashboard voice and clear the setup-page Voice ID field.
 - If your ElevenLabs API key also has `convai_read`, the app can preflight-check the agent and diagnose missing audio more deeply. Without that permission, launch still works, but advanced diagnostics are limited.
 - Do not rely on code-side prompt or first-message overrides unless you explicitly enable them in the ElevenLabs agent security settings.
 
@@ -72,6 +89,7 @@ Important:
 - Confirm `ELEVENLABS_AGENT_ID` and `ELEVENLABS_API_KEY` are correct in `.env`.
 - Verify the agent exists and is enabled in ElevenLabs.
 - Make sure the ElevenLabs agent prompt and first message use the dynamic variables listed in [elevenlabs_agent_system_prompt.md](./elevenlabs_agent_system_prompt.md).
+- If a launch fails with `Override for field 'voice_id' is not allowed by config`, enable Voice ID overrides in the agent's Security settings, or clear the Voice ID field and set that voice as the agent's dashboard voice.
 - If launch warns that `convai_read` is missing, the host can still run, but agent preflight and conversation-level audio diagnosis will be unavailable.
 - If your agent rejects prompt overrides, that is expected with the current build because this app now relies on dynamic variables instead of prompt or first-message overrides.
 - Make sure local firewalls allow outbound WebSocket connections.

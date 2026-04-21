@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm install --prefix ai-virtual-host/frontend",
+  "installCommand": "npm ci --prefix ai-virtual-host/frontend",
   "buildCommand": "npm run build --prefix ai-virtual-host/frontend",
   "outputDirectory": "ai-virtual-host/frontend/dist",
   "rewrites": [

@@ -1,0 +1,15 @@
+{
+  "installCommand": "npm install --prefix ai-virtual-host/frontend",
+  "buildCommand": "npm run build --prefix ai-virtual-host/frontend",
+  "outputDirectory": "ai-virtual-host/frontend/dist",
+  "rewrites": [
+    {
+      "source": "/live",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/logs",
+      "destination": "/index.html"
+    }
+  ]
+}

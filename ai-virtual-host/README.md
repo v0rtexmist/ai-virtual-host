@@ -28,6 +28,12 @@ Optional default voice override:
 ELEVENLABS_VOICE_ID=2BsEFcU7jUhLaUwV4h7l
 ```
 
+If you open the frontend from Vercel while the backend runs on your laptop, also allow that exact Vercel URL:
+
+```powershell
+FRONTEND_ORIGINS=https://your-vercel-app.vercel.app
+```
+
 3. Install backend dependencies:
 
 ```powershell
@@ -57,6 +63,23 @@ npm.cmd run dev
 ```
 
 The frontend will be available at `http://localhost:5173`, and the backend will run at `http://localhost:8000`.
+
+## Vercel Frontend
+
+Vercel can host the React frontend, but this backend controls your camera, speakers, and long-running ElevenLabs session, so it still needs to run on the machine at the event.
+
+For the Vercel frontend to launch the local backend:
+
+1. Add your Vercel app URL to `FRONTEND_ORIGINS` in `ai-virtual-host/.env`.
+2. Start the backend locally with `uvicorn backend.main:app --host 127.0.0.1 --port 8000`.
+3. Open the Vercel frontend in the same laptop browser.
+
+If you deploy the backend somewhere else, set these Vercel environment variables before building the frontend:
+
+```powershell
+VITE_API_ORIGIN=https://your-backend.example.com
+VITE_WS_ORIGIN=wss://your-backend.example.com
+```
 
 ## ElevenLabs Agent Configuration
 

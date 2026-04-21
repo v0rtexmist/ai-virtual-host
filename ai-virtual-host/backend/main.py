@@ -23,10 +23,20 @@ DEFAULT_PERSONA_NAME = "AI Virtual Host"
 DEFAULT_ELEVENLABS_VOICE_ID = os.getenv(
     "ELEVENLABS_VOICE_ID", "2BsEFcU7jUhLaUwV4h7l"
 ).strip()
+DEFAULT_FRONTEND_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+
+
+def _get_frontend_origins() -> list[str]:
+    configured_origins = [
+        origin.strip().rstrip("/")
+        for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    return [*DEFAULT_FRONTEND_ORIGINS, *configured_origins]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_get_frontend_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
